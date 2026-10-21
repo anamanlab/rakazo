@@ -124,7 +124,31 @@ it.
 
 ---
 
-## 3. Operating it
+## 3. What is not switched on
+
+Three things are off until an operator turns them on, because each one costs money
+or a provider account and none of them is needed to serve the app.
+
+**Agent computers.** The sandbox provider is `none`, so agents have no computer.
+Pick a provider and set it with its key: `e2b`, `daytona`, `boat` or `createos` for a
+remote computer, or `docker` to run the computer image on the host. The host needs
+about four gigabytes of memory for the image.
+
+**The model provider.** The deployment serves the app but has no model key, so a
+conversation has nothing to answer with. Set `OPENROUTER_API_KEY`, or whichever
+provider the deployment model names, and restart the API and the worker.
+
+**Email.** Without `SMTP_URL` and `EMAIL_FROM` there is no way to deliver a
+verification or recovery message, and no owner can be created by the bootstrap
+command.
+
+The first account is created by the bootstrap command, which needs an address and a
+password of at least sixteen characters. The credentials it is given are written
+outside the repository, and the address is the one the owner signs in with.
+
+---
+
+## 4. Operating it
 
 ### Redeploying the edge
 
@@ -169,7 +193,7 @@ restarting the API applies it on the next deploy.
 
 ---
 
-## 4. The ceilings
+## 5. The ceilings
 
 Every one of these is a hard limit of a free plan. They are listed with what
 happens when the limit is reached, because none of them fail loudly.
@@ -199,7 +223,7 @@ result against the monthly allowance to see how long the month has to fit in.
 
 ---
 
-## 5. Checking the deployment
+## 6. Checking the deployment
 
 ```bash
 # The document comes from the edge and is cached there.
