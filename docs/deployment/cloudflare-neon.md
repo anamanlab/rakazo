@@ -139,6 +139,10 @@ The push workflow does this on `main` once the `EDGE_DEPLOY_ENABLED` repository
 variable is set. It needs a `CLOUDFLARE_API_TOKEN` secret and the hostname
 variables as repository variables.
 
+The edge packages build their Worker from the assets the two site builds produce, so
+those have to run first. `pnpm --filter @rakazo/web-edge bundle` builds the Worker
+without uploading it, which is the way to check a change locally.
+
 ### Redeploying the host
 
 ```bash

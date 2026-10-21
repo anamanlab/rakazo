@@ -33,7 +33,9 @@
     "perf:desktop": "tsx packages/testkit/src/cli/desktop-performance.ts",
     "perf:compare": "tsx packages/testkit/src/cli/compare-performance.ts",
     "compose:up": "docker compose --env-file .env -f infra/compose/docker-compose.yml up --build",
-    "compose:down": "docker compose --env-file .env -f infra/compose/docker-compose.yml down -v"
+    "compose:down": "docker compose --env-file .env -f infra/compose/docker-compose.yml down -v",
+    "compose:managed:up": "docker compose --env-file .env -f infra/compose/docker-compose.managed.yml up -d",
+    "compose:managed:down": "docker compose --env-file .env -f infra/compose/docker-compose.managed.yml down"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

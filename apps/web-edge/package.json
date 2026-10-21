@@ -5,10 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "cf build",
     "deploy": "cf deploy",
     "types": "cf workers types",
-    "check": "cf workers types && tsc --noEmit -p tsconfig.json"
+    "check": "cf workers types && tsc --noEmit -p tsconfig.json",
+    "bundle": "cf build"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261021.1",
