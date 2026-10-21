@@ -1,6 +1,6 @@
+import { LATEST_RELEASE_URL } from "@rakazo/www/site";
 import { describe, expect, it, vi } from "vitest";
-import { fetchDownload } from "../api/download";
-import { LATEST_RELEASE_URL } from "./site";
+import { fetchDownload } from "./download";
 
 const DMG = "https://github.com/elie222/rakazo/releases/download/v2.0.0/Rakazo-2.0.0-universal.dmg";
 const release = vi.fn(async () =>
@@ -21,7 +21,9 @@ describe("download redirect", () => {
   });
 
   it("falls back to the latest release page", async () => {
-    const failing = vi.fn(async () => new Response(null, { status: 503 })) as unknown as typeof fetch;
+    const failing = vi.fn(
+      async () => new Response(null, { status: 503 }),
+    ) as unknown as typeof fetch;
 
     for (const response of [
       await download("?platform=linux"),

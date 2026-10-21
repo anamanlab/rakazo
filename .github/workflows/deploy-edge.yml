@@ -1,0 +1,87 @@
+name: deploy-edge
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "apps/web-edge/**"
+      - "apps/www/**"
+      - "apps/www-edge/**"
+      - ".github/workflows/deploy-edge.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-edge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate edge build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @rakazo/web build
+      - run: pnpm --filter @rakazo/www build
+      # A dry run builds the Worker and validates the build output without uploading
+      # it, so a broken edge bundle is caught by the pull request.
+      - name: Check the app worker
+        env:
+          RAKAZO_EDGE_HOST: ${{ vars.RAKAZO_EDGE_HOST }}
+          RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
+          RAKAZO_EDGE_ORIGIN: ${{ vars.RAKAZO_EDGE_ORIGIN }}
+        run: pnpm --filter @rakazo/web-edge exec cf deploy --dry-run
+      - name: Check the marketing site worker
+        env:
+          RAKAZO_WWW_EDGE_HOST: ${{ vars.RAKAZO_WWW_EDGE_HOST }}
+          RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
+        run: pnpm --filter @rakazo/www-edge exec cf deploy --dry-run
+
+  deploy:
+    name: Deploy edge
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.EDGE_DEPLOY_ENABLED == 'true'
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: edge-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @rakazo/web build
+      - run: pnpm --filter @rakazo/www build
+      - name: Deploy the app worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RAKAZO_EDGE_HOST: ${{ vars.RAKAZO_EDGE_HOST }}
+          RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
+          RAKAZO_EDGE_ORIGIN: ${{ vars.RAKAZO_EDGE_ORIGIN }}
+        run: pnpm --filter @rakazo/web-edge exec cf deploy --message "Rakazo app edge ${{ github.sha }}"
+      - name: Deploy the marketing site worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RAKAZO_WWW_EDGE_HOST: ${{ vars.RAKAZO_WWW_EDGE_HOST }}
+          RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
+        run: pnpm --filter @rakazo/www-edge exec cf deploy --message "Rakazo marketing site edge ${{ github.sha }}"

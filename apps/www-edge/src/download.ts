@@ -1,9 +1,9 @@
-import type { DesktopDownloads } from "../src/github.js";
-import { fetchDesktopDownloads } from "../src/github.js";
-import { LATEST_RELEASE_URL } from "../src/site.js";
-
-// Edge functions are bundled, which resolves the extensionless source imports.
-export const config = { runtime: "edge" };
+/**
+ * Redirects to the newest installer so a desktop release needs no site rebuild.
+ */
+import type { DesktopDownloads } from "@rakazo/www/github";
+import { fetchDesktopDownloads } from "@rakazo/www/github";
+import { LATEST_RELEASE_URL } from "@rakazo/www/site";
 
 /** Redirects to the newest installer so a desktop release needs no site rebuild. */
 export async function fetchDownload(
@@ -23,8 +23,4 @@ export async function fetchDownload(
       "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400",
     },
   });
-}
-
-export function GET(request: Request): Promise<Response> {
-  return fetchDownload(request);
 }
