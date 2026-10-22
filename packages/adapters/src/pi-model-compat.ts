@@ -15,6 +15,17 @@ export function applyPiModelCompatibility(models: MutableModels): MutableModels 
       );
     models.setProvider({ ...provider, getModels: () => guardedModels });
   }
+  // Groq's OpenAI-compatible endpoint only accepts the system role. Pi marks
+  // standard OpenAI-style providers as developer-role capable, so reasoning
+  // models such as Qwen3 send "developer" and Groq rejects the chat template.
+  const groq = models.getProvider?.("groq");
+  if (groq) {
+    const groqModels = groq.getModels().map((model) => ({
+      ...model,
+      compat: { ...model.compat, supportsDeveloperRole: false },
+    }));
+    models.setProvider({ ...groq, getModels: () => groqModels });
+  }
   const getModel = models.getModel.bind(models);
   models.getModel = (provider, id) => getModel(canonicalPiProviderId(provider), id);
   const getProvider = models.getProvider?.bind(models);

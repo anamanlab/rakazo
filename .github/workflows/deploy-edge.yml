@@ -32,7 +32,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @rakazo/web build
+      - name: Build the app
+        env:
+          RAKAZO_CSP_SCRIPT_SRC: ${{ vars.RAKAZO_CSP_SCRIPT_SRC }}
+          RAKAZO_CSP_CONNECT_SRC: ${{ vars.RAKAZO_CSP_CONNECT_SRC }}
+        run: pnpm --filter @rakazo/web build
       - run: pnpm --filter @rakazo/www build
       # A dry run builds the Worker and validates the build output without uploading
       # it, so a broken edge bundle is caught by the pull request.
@@ -70,7 +74,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @rakazo/web build
+      - name: Build the app
+        env:
+          RAKAZO_CSP_SCRIPT_SRC: ${{ vars.RAKAZO_CSP_SCRIPT_SRC }}
+          RAKAZO_CSP_CONNECT_SRC: ${{ vars.RAKAZO_CSP_CONNECT_SRC }}
+        run: pnpm --filter @rakazo/web build
       - run: pnpm --filter @rakazo/www build
       - name: Deploy the app worker
         env:

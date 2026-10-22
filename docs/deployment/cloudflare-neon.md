@@ -152,12 +152,22 @@ outside the repository, and the address is the one the owner signs in with.
 
 ### Redeploying the edge
 
+The build bakes the Content-Security-Policy into the asset worker's `_headers`. A zone
+that runs Cloudflare Web Analytics has its beacon injected into every HTML response,
+so the build has to allow that origin, or the console reports a blocked script:
+
 ```bash
-pnpm --filter @rakazo/web build
+RAKAZO_CSP_SCRIPT_SRC=https://static.cloudflareinsights.com \
+RAKAZO_CSP_CONNECT_SRC=https://cloudflareinsights.com \
+  pnpm --filter @rakazo/web build
 pnpm --filter @rakazo/www build
 pnpm --filter @rakazo/web-edge exec cf deploy
 pnpm --filter @rakazo/www-edge exec cf deploy
 ```
+
+Turning the zone's automatic Web Analytics injection off removes the need for both
+origins. The push workflow passes `RAKAZO_CSP_SCRIPT_SRC` and
+`RAKAZO_CSP_CONNECT_SRC` from repository variables.
 
 The push workflow does this on `main` once the `EDGE_DEPLOY_ENABLED` repository
 variable is set. It needs a `CLOUDFLARE_API_TOKEN` secret and the hostname
