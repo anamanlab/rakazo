@@ -3,6 +3,8 @@
 .vercel
 .turbo
 .cache
+.cloudflare
+.wrangler
 .DS_Store
 .env
 .env.*

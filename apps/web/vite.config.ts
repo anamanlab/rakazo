@@ -11,6 +11,7 @@ import {
   appContentSecurityPolicy,
   CSP_REPORTING_ENDPOINTS,
   contentSecurityPolicyFor,
+  HTML_VIEWER_PATH,
   parseContentSecuritySources,
 } from "@rakazo/contracts/content-security-policy";
 import {
@@ -48,6 +49,32 @@ const screenLog = createServiceLogger({ service: "rakazo-web" });
 
 function screenPolicy(url: string | undefined) {
   return url?.startsWith("/novnc/session/control/") ? "control" : "view";
+}
+
+/**
+ * The header file Cloudflare reads from a static asset directory. The policy is the
+ * one the preview server sends, so a document served from the edge and one served by
+ * the preview server carry the same rules.
+ *
+ * The viewer shell embeds a preview in an iframe, so it needs a policy that allows
+ * being framed by this origin. Its own meta policy cannot say that: `frame-ancestors`
+ * is ignored in a meta tag, which is why the shell gets its own header rule here.
+ */
+function cloudflareHeaders(appPolicy: string): string {
+  const viewerPolicy = contentSecurityPolicyFor(HTML_VIEWER_PATH, appPolicy);
+  return [
+    "/*",
+    `  Content-Security-Policy: ${appPolicy}`,
+    `  Reporting-Endpoints: ${CSP_REPORTING_ENDPOINTS}`,
+    "  X-Content-Type-Options: nosniff",
+    "  X-Frame-Options: SAMEORIGIN",
+    "  Strict-Transport-Security: max-age=31536000",
+    "",
+    HTML_VIEWER_PATH,
+    "  ! Content-Security-Policy",
+    ...(viewerPolicy ? [`  Content-Security-Policy: ${viewerPolicy}`] : []),
+    "",
+  ].join("\n");
 }
 
 function socketErrorCode(error: unknown) {
@@ -390,6 +417,8 @@ export default defineConfig(({ mode }) => {
     [
       "/api",
       "/rpc",
+      // The liveness probe. The document would otherwise answer it with the shell.
+      "/health",
       // Native app domain association, served by the API from deployment settings.
       "/.well-known/apple-app-site-association",
       "/.well-known/assetlinks.json",
@@ -456,6 +485,20 @@ export default defineConfig(({ mode }) => {
               res.setHeader("reporting-endpoints", CSP_REPORTING_ENDPOINTS);
             }
             next();
+          });
+        },
+      },
+      {
+        // The edge serves the built SPA from its own asset worker, which cannot run
+        // the middleware above. The same rules travel with the build instead, in the
+        // header file Cloudflare reads from the asset directory.
+        name: "rakazo-cloudflare-headers",
+        apply: "build",
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "_headers",
+            source: cloudflareHeaders(appPolicy),
           });
         },
       },

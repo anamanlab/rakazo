@@ -1,0 +1,27 @@
+[Unit]
+Description=Cloudflare Tunnel connector for Rakazo
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The tunnel is remotely managed: its ingress rules live in the Cloudflare API, so this
+# unit only holds the connector. The token is a root-only file; it is the credential
+# that lets this host claim the tunnel, not a user credential.
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:2000 run --token-file /etc/cloudflared/rakazo.tunnel.token
+Restart=on-failure
+RestartSec=5
+# The connector holds long-lived connections to Cloudflare and keeps its own state.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
