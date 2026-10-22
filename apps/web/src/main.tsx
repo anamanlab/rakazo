@@ -1,3 +1,4 @@
+import "./lib/zod-jitless";
 import { Toaster, TooltipProvider } from "@rakazo/ui-web";
 import { StrictMode, useEffect, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
