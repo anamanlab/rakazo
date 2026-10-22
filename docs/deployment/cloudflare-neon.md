@@ -134,9 +134,14 @@ Pick a provider and set it with its key: `e2b`, `daytona`, `boat` or `createos` 
 remote computer, or `docker` to run the computer image on the host. The host needs
 about four gigabytes of memory for the image.
 
-**The model provider.** The deployment serves the app but has no model key, so a
-conversation has nothing to answer with. Set `OPENROUTER_API_KEY`, or whichever
-provider the deployment model names, and restart the API and the worker.
+**The model provider.** The deployment serves the app but starts without a model, so a
+conversation has nothing to answer with. The owner connects one in Settings → Models.
+A connection is a key plus the settings that provider needs, and the space's default
+model follows the connection. Cloudflare's AI Gateway reaches Workers AI with one
+token: the account id, the gateway id, and a token that may invoke Workers AI
+models. Workers AI's free allowance is a daily one, so a long conversation does not
+run into a per-minute ceiling the way a free tier with a token-per-minute limit
+does.
 
 **Email.** Without `SMTP_URL` and `EMAIL_FROM` there is no way to deliver a
 verification or recovery message, and no owner can be created by the bootstrap
@@ -187,6 +192,21 @@ docker compose --env-file .env -f infra/compose/docker-compose.managed.yml up -d
 The API container applies pending migrations before it starts serving. Keep
 `ENCRYPTION_KEY` unchanged across deploys: it wraps the stored content keys, so
 changing it makes every stored secret and every encrypted artifact unreadable.
+
+### The plugin catalog
+
+The Plugins panel lists the apps a deployment can connect. With `INTEGRATIONS_CATALOG_URL`
+pointing at a catalog service, the panel searches that catalog by domain and installs
+the surfaces it finds as app sources; without it, the panel shows only the sources
+added by hand. A deployment that connects apps through a managed provider is
+configured in the integration setup, which only the owner can open.
+
+### Accounts and sign-ups
+
+The first account is the deployment owner: it opens the deployment settings, the
+integration setup and the computer settings. Sign-ups stay closed until the owner
+opens them, either for everyone or for a list of addresses. A deployment that is
+meant to stay private keeps them closed.
 
 ### Reading the logs
 
@@ -248,6 +268,13 @@ curl -s https://<www-host>/ -H 'Accept: text/markdown' | head -1
 
 # The database enforces its row-level security.
 psql "$DATABASE_URL" -c "SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = 'rakazo_app'"
+
+# The plugin catalog answers from the API container.
+docker compose --env-file .env -f infra/compose/docker-compose.managed.yml exec api \
+  curl -sS -o /dev/null -w '%{http_code}\n' "$INTEGRATIONS_CATALOG_URL/api/search?q=notion"
+
+# The space has a default model, so a conversation has something to answer with.
+psql "$DATABASE_URL" -c 'SELECT c.provider, p."modelId" FROM space_model_preferences p JOIN user_model_credentials c ON c.id = p."credentialId" WHERE p."isDefault"'
 ```
 
 The last one must report `rolbypassrls` as false. If it reports true, the runtime
