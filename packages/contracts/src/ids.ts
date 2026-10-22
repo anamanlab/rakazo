@@ -48,5 +48,7 @@ export const SandboxKind = z.enum([
   "railway",
   "desktop",
   "fake",
+  /** No computer host configured; bot computers fail closed. */
+  "none",
 ]);
 export type SandboxKind = z.infer<typeof SandboxKind>;

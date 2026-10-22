@@ -2101,6 +2101,7 @@ describe("computer replacement", () => {
   it("exposes update availability by sandbox kind", () => {
     expect(computerSupportsUpdate("e2b")).toBe(true);
     expect(computerSupportsUpdate("desktop")).toBe(false);
+    expect(computerSupportsUpdate("none")).toBe(false);
   });
 
   it("replaces a wedged computer and restores the durable home", async () => {
