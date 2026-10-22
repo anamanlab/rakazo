@@ -20,12 +20,10 @@ export function applyPiModelCompatibility(models: MutableModels): MutableModels 
   // models such as Qwen3 send "developer" and Groq rejects the chat template.
   const groq = models.getProvider?.("groq");
   if (groq) {
-    const groqModels = groq
-      .getModels()
-      .map((model) => ({
-        ...model,
-        compat: { ...model.compat, supportsDeveloperRole: false },
-      }));
+    const groqModels = groq.getModels().map((model) => ({
+      ...model,
+      compat: { ...model.compat, supportsDeveloperRole: false },
+    }));
     models.setProvider({ ...groq, getModels: () => groqModels });
   }
   const getModel = models.getModel.bind(models);
