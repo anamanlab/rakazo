@@ -16,6 +16,37 @@ const LOCAL_MODEL_ID = "rakazo-e2e-local";
 const SECOND_MODEL_ID = "rakazo-e2e-second";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 
+test("connects Workers AI directly without gateway setup", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await signup(page, `workers-ai-${Date.now()}@rakazo.test`, "password12", "Workers AI Preview");
+  await completeOnboarding(page);
+  await openUserSettings(page, "models");
+  await page.getByPlaceholder("Search providers").fill("Cloudflare Workers AI");
+  await page.getByRole("button", { name: /^Cloudflare Workers AI( |$)/ }).click();
+  await expect(page.getByLabel("Account ID", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Gateway ID", { exact: true })).toHaveCount(0);
+  const connect = page.getByRole("button", { name: "Connect API key", exact: true });
+  await page.getByLabel("API key", { exact: true }).fill("fake-workers-ai-test-key");
+  await expect(connect).toBeDisabled();
+  await page.getByLabel("Account ID", { exact: true }).fill("testaccount1234");
+  await chooseOption(page.getByRole("combobox", { name: "Model", exact: true }), "GLM-4.7-Flash");
+  await captureScreenshot(page, testInfo, "cloudflare-workers-ai-direct-connection");
+  const saved = page.waitForResponse(
+    (response) => response.url().includes("/rpc/models/connect") && response.ok(),
+  );
+  await connect.click();
+  await saved;
+  const credentials = await rpc<
+    Array<{ provider: string; accountId?: string; gatewayId?: string }>
+  >(page, "models/credentials", {});
+  expect(credentials.find((c) => c.provider === "cloudflare-workers-ai")).toMatchObject({
+    accountId: "testaccount1234",
+  });
+  expect(
+    credentials.find((c) => c.provider === "cloudflare-workers-ai")?.gatewayId,
+  ).toBeUndefined();
+});
+
 test("model settings cleanup frames", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const stamp = Date.now();

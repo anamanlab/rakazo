@@ -43,6 +43,14 @@ describe("transient model errors", () => {
   });
 
   it.each([
+    [
+      "daily free allocation",
+      {
+        status: 429,
+        message: "You have used up your daily free allocation of 10,000 neurons.",
+      },
+    ],
+    ["daily quota", { status: 429, message: "Daily quota exceeded. Try again tomorrow." }],
     ["usage limit", "You have hit your ChatGPT usage limit (plus plan). Try again in ~158 min."],
     [
       "exhausted quota",

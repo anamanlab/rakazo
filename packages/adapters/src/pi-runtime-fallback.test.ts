@@ -508,6 +508,49 @@ describe("Pi runtime transient model retries", () => {
 });
 
 describe("Pi runtime ordered model fallback", () => {
+  it("does not retry an exhausted daily allocation when no backup is connected", async () => {
+    providerState.stream.mockImplementation(() =>
+      stream(
+        primary,
+        message(
+          primary,
+          [],
+          "error",
+          "429: You have used up your daily free allocation of 10,000 neurons.",
+        ),
+      ),
+    );
+    await expect(run(request())).rejects.toThrow("daily free allocation");
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    expect(providerState.delay).not.toHaveBeenCalled();
+  });
+
+  it("uses the selected backup after daily allocation exhaustion without retrying the primary", async () => {
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      target.provider === primary.provider
+        ? stream(
+            target,
+            message(
+              target,
+              [],
+              "error",
+              "429: You have used up your daily free allocation of 10,000 neurons.",
+            ),
+          )
+        : stream(target, message(target, [{ type: "text", text: "Ready" }], "stop")),
+    );
+    const events = await run(
+      request([{ provider: backupA.provider, id: backupA.id, apiKey: "fake-backup-key" }]),
+    );
+    expect(
+      providerState.stream.mock.calls.map(
+        ([target]) => (target as Model<"openai-completions">).provider,
+      ),
+    ).toEqual([primary.provider, backupA.provider]);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Ready" });
+    expect(providerState.delay).not.toHaveBeenCalled();
+  });
+
   it.each(["absent", "empty"])(
     "passes the original stream options and terminal content through with %s backups",
     async (backups) => {

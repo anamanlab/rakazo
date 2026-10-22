@@ -110,7 +110,7 @@ export function isTransientModelError(error: unknown): boolean {
     );
   return (
     isRetryableProviderUnavailable(error) &&
-    !/insufficient_quota|exceeded your current quota|quota exhausted|(?:chatgpt|5-hour|weekly(?: \(7-day\))?|monthly) usage limit|billing|credit balance|insufficient (?:funds|balance|credits)|payment|out of budget/.test(
+    !/insufficient_quota|exceeded your current quota|quota exhausted|daily (?:free )?(?:allocation|quota|limit)|(?:chatgpt|5-hour|weekly(?: \(7-day\))?|monthly) usage limit|billing|credit balance|insufficient (?:funds|balance|credits)|payment|out of budget/.test(
       text,
     ) &&
     !(text.includes("usage limit") && !shortWindow)
