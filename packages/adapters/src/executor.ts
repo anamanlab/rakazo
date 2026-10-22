@@ -46,6 +46,7 @@ import {
   BotSecretName,
   botSecretSubmissionSchema,
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
+  CLOUDFLARE_WORKERS_AI_CONFIG_MESSAGE,
   COMPUTER_COMMAND_OUTPUT_MAX_CHARS,
   disabledBuiltinToolSet,
   FLEET_TOOL_NAMES,
@@ -221,7 +222,7 @@ import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
-import { cloudflareGatewayProviderEnv } from "./cloudflare-ai-gateway.js";
+import { cloudflareModelProviderEnv } from "./cloudflare-ai-gateway.js";
 import type { PluginConnectionRow } from "./composio-connector.js";
 import {
   collectLogIds,
@@ -3040,7 +3041,9 @@ export function isTerminalModelSetupError(error: unknown): boolean {
   return (
     error instanceof UnavailableModelForAuthError ||
     isRetiredModelCredentialError(error) ||
-    (error instanceof Error && error.message === CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE)
+    (error instanceof Error &&
+      (error.message === CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE ||
+        error.message === CLOUDFLARE_WORKERS_AI_CONFIG_MESSAGE))
   );
 }
 
@@ -9837,7 +9840,7 @@ async function resolveModelKey(
         if (credential.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
           throw new UnavailableModelForAuthError("Unknown model for that provider");
         }
-        cloudflareGatewayProviderEnv({ provider });
+        cloudflareModelProviderEnv({ provider });
         return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
       }
       const plaintext = await deps.secretStore.load(row.ciphertext, row.id);
@@ -9926,7 +9929,7 @@ async function resolveModelKey(
             credential.defaultModel?.trim() === modelId.trim()));
       const accountId = resolved.secret.kind === "api_key" ? resolved.secret.accountId : undefined;
       const gatewayId = resolved.secret.kind === "api_key" ? resolved.secret.gatewayId : undefined;
-      cloudflareGatewayProviderEnv({ provider, accountId, gatewayId });
+      cloudflareModelProviderEnv({ provider, accountId, gatewayId });
       return {
         apiKey: resolved.apiKey,
         accountId,
@@ -9986,7 +9989,7 @@ async function resolveModelKey(
     });
   }
   if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
-  cloudflareGatewayProviderEnv({ provider });
+  cloudflareModelProviderEnv({ provider });
   return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
 }
 

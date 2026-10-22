@@ -427,6 +427,41 @@ it("shows Cloudflare account and gateway fields for a new and a saved connection
   }
 });
 
+it("connects Workers AI with an account and key, without a gateway", async () => {
+  const entry = {
+    provider: "cloudflare-workers-ai",
+    providerName: "Cloudflare Workers AI",
+    id: "@cf/zai-org/glm-4.7-flash",
+    label: "GLM-4.7-Flash",
+    billing: "API key",
+    auth: "api-key" as const,
+    authHint: "API key",
+  };
+  vi.mocked(rpc.me).mockResolvedValue(account(entry.provider, entry.id));
+  models.list.mockResolvedValue([entry]);
+  const view = await renderSettings();
+  try {
+    const accountId = view.container.querySelector("#cloudflare-account-id");
+    expect(accountId).toBeInstanceOf(HTMLInputElement);
+    expect(view.container.querySelector("#cloudflare-gateway-id")).toBeNull();
+    await typeInto(keyField(view.container), "cf-test-key-value");
+    expect(buttons(view.container, "Connect")[0]?.disabled).toBe(true);
+    await typeInto(accountId as HTMLInputElement, "acct1234");
+    await act(async () => buttons(view.container, "Connect")[0]?.click());
+    expect(models.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: entry.provider,
+        modelId: entry.id,
+        apiKey: "cf-test-key-value",
+        accountId: "acct1234",
+      }),
+    );
+    expect(models.connect.mock.calls[0]?.[0]).not.toHaveProperty("gatewayId");
+  } finally {
+    await view.unmount();
+  }
+});
+
 it("shows a stored OpenAI-compatible key and stays empty when none is saved", async () => {
   vi.mocked(rpc.me).mockResolvedValue(account("openai-compatible", "deepseek-chat"));
   models.list.mockResolvedValue([compatibleEntry]);

@@ -139,9 +139,9 @@ conversation has nothing to answer with. The owner connects one in Settings → 
 A connection is a key plus the settings that provider needs, and the space's default
 model follows the connection. Cloudflare's AI Gateway reaches Workers AI with one
 token: the account id, the gateway id, and a token that may invoke Workers AI
-models. Workers AI's free allowance is a daily one, so a long conversation does not
-run into a per-minute ceiling the way a free tier with a token-per-minute limit
-does.
+models. Workers AI has a shared daily free allowance and request rate limits. AI
+Gateway's free routing and caching features do not make upstream paid models free.
+See [free model setup and troubleshooting](#free-model-setup-and-troubleshooting).
 
 **Email.** Without `SMTP_URL` and `EMAIL_FROM` there is no way to deliver a
 verification or recovery message, and no owner can be created by the bootstrap
@@ -222,6 +222,66 @@ exception: it is set by the migration, so changing it in the environment file an
 restarting the API applies it on the next deploy.
 
 ---
+
+### Free model setup and troubleshooting
+
+Use Settings → Models to save the connection and its default model. Token limits
+belong to that connection; no provider-specific environment variables are needed.
+Web, desktop, and mobile use the same backend configuration. A bot with its own
+model overrides the space default, so check its model selection too.
+
+**Groq.** Test the key and choose a model returned by the live model list. A model
+name copied from an older guide can return `404 model_not_found` even with a valid
+key. `openai/gpt-oss-20b` supports tools and low reasoning effort. For an account
+with a 1,000 output-token-per-minute limit, start with a maximum output of 900 and
+low thinking. Thinking consumes the output budget too. These settings do not
+remove input-token or daily limits: Rakazo sends instructions and tool schemas as
+well as the conversation. A fresh conversation can help with accumulated history;
+even a fresh turn can exceed a small input allowance. Use the account's actual
+limits rather than the model's much larger context window.
+
+**Cloudflare Workers AI directly.** Select Cloudflare Workers AI, enter the account
+ID and a token permitted to invoke Workers AI, and select
+`@cf/zai-org/glm-4.7-flash`. Start with a maximum output of 2,048. No gateway,
+prepaid credits, custom endpoint, or new deployment environment variable is needed.
+This model supports tool calls, has a 131,072-token context window, and remains
+available on Workers Free. Existing AI Gateway connections remain supported: they
+also require a gateway ID and use the model ID
+`workers-ai/@cf/zai-org/glm-4.7-flash`. Selecting an upstream paid provider model
+through the gateway can require prepaid credits instead. The output cap bounds
+each completion, not the whole conversation or a sequence of tool calls.
+
+Workers AI includes **10,000 neurons per account per day**, shared across models
+and applications. The allocation resets at **00:00 UTC**. Error `4006` means that
+allowance is exhausted; changing models or calling Workers AI directly does not
+refresh it. On Workers Free, wait for the reset. Keep the free plan to retain its
+hard daily stop; upgrading permits charges beyond the allowance. Some models
+require payment even before that allowance is exhausted.
+
+| Failure | Meaning | Next step |
+| --- | --- | --- |
+| `401` or an authentication error | The credential was rejected | Check or replace the key in the connection |
+| Groq `404 model_not_found` | That model is unavailable to the key | Test the key and select a returned model ID |
+| Groq `413` / `429` saying the requested input exceeds the limit | A single prompt exceeds an input allowance | Reduce conversation context; waiting cannot make an oversized prompt fit |
+| Groq `429` after earlier successful calls | The current rate allowance is consumed | Respect the retry delay; a tool loop sends the context again on each call |
+| Groq `429` mentioning OTPM or output tokens | Output exceeds the account's allowance | Lower maximum output and thinking; respect the retry delay for consumed capacity |
+| Workers AI `429`, code `4006` | Shared daily free allocation exhausted | Wait until 00:00 UTC |
+| Gateway `402`, code `2021` | Unified billing has no credits | Select a Workers AI model eligible for the free plan |
+| Workers AI `403`, code `5035` | The chosen model requires payment | Select a model available on Workers Free |
+| `Required context exceeds the model context budget` | Required instructions, tools, or the current request do not fit | Choose a larger-context model or reduce the offered tools/current request |
+
+Free AI Gateway caching only reuses identical requests. Chat history and tool
+results change between turns, so it is not a replacement for an inference allowance.
+Do not cache tool execution itself.
+
+Checked against the official documentation on October 22, 2026:
+[Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/),
+[rate limits](https://developers.cloudflare.com/workers-ai/platform/limits/),
+[GLM-4.7-Flash](https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/),
+[paid-model changes](https://developers.cloudflare.com/changelog/post/2026-07-28-models-require-workers-paid/),
+[Chat Completions and tool-call fixes](https://developers.cloudflare.com/workers-ai/changelog/),
+[AI Gateway pricing](https://developers.cloudflare.com/ai-gateway/reference/pricing/),
+and [Groq rate limits](https://console.groq.com/docs/rate-limits).
 
 ## 5. The ceilings
 

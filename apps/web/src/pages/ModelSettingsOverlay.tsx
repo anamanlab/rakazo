@@ -3,9 +3,10 @@ import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import type { Me, ThinkingLevel } from "@rakazo/contracts";
 import {
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-  cloudflareGatewayRouting,
+  cloudflareModelRouting,
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
+  isCloudflareModelProvider,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -312,8 +313,9 @@ export function ModelSettingsOverlay({
   );
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   const isCloudflareGateway = provider === CLOUDFLARE_AI_GATEWAY_PROVIDER_ID;
+  const isCloudflare = isCloudflareModelProvider(provider);
   const cloudflareRoutingReady =
-    !isCloudflareGateway || cloudflareGatewayRouting({ accountId, gatewayId }) !== undefined;
+    !isCloudflare || cloudflareModelRouting(provider, { accountId, gatewayId }) !== undefined;
   const credential = credentials.find((entry) => entry.provider === provider);
   const currentEntry = catalog.find(
     (entry) => entry.provider === me?.defaultProvider && entry.id === me?.defaultModel,
@@ -363,9 +365,9 @@ export function ModelSettingsOverlay({
     !isOpenAiCompatible &&
     Boolean(credential) &&
     (maxTokens.trim() !== connectionMaxTokensField(provider, credential?.maxTokens) ||
-      (isCloudflareGateway &&
+      (isCloudflare &&
         (accountId.trim() !== (credential?.accountId ?? "") ||
-          gatewayId.trim() !== (credential?.gatewayId ?? ""))));
+          (isCloudflareGateway && gatewayId.trim() !== (credential?.gatewayId ?? "")))));
 
   function invalidatePreflight() {
     preflightRevisionRef.current += 1;
@@ -650,9 +652,7 @@ export function ModelSettingsOverlay({
           : {
               provider: selected.provider,
               ...(newKey ? { apiKey: newKey } : {}),
-              ...(isCloudflareGateway
-                ? { accountId: accountId.trim(), gatewayId: gatewayId.trim() }
-                : {}),
+              ...(isCloudflare ? cloudflareModelRouting(provider, { accountId, gatewayId }) : {}),
               modelId: selected.id,
               // A limits-only save leaves the stored effort alone while the model
               // stays put. Changing the model sends the clamped level, including
@@ -1002,7 +1002,7 @@ export function ModelSettingsOverlay({
 
       {acceptsKey ? (
         <div className="mt-5 first:mt-0">
-          {isCloudflareGateway ? (
+          {isCloudflare ? (
             <>
               <label
                 className="block text-[13.5px] text-muted-foreground"
@@ -1018,25 +1018,27 @@ export function ModelSettingsOverlay({
                   className="mt-2 h-10 text-foreground"
                 />
               </label>
-              <label
-                className="mt-4 block text-[13.5px] text-muted-foreground"
-                htmlFor="cloudflare-gateway-id"
-              >
-                <Trans>Gateway ID</Trans>
-                <Input
-                  id="cloudflare-gateway-id"
-                  value={gatewayId}
-                  onChange={(event) => setGatewayId(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="mt-2 h-10 text-foreground"
-                />
-              </label>
+              {isCloudflareGateway ? (
+                <label
+                  className="mt-4 block text-[13.5px] text-muted-foreground"
+                  htmlFor="cloudflare-gateway-id"
+                >
+                  <Trans>Gateway ID</Trans>
+                  <Input
+                    id="cloudflare-gateway-id"
+                    value={gatewayId}
+                    onChange={(event) => setGatewayId(event.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="mt-2 h-10 text-foreground"
+                  />
+                </label>
+              ) : null}
             </>
           ) : null}
           {acceptsKey ? (
             <label
-              className={`block text-[13.5px] text-muted-foreground ${isCloudflareGateway ? "mt-4" : ""}`}
+              className={`block text-[13.5px] text-muted-foreground ${isCloudflare ? "mt-4" : ""}`}
               htmlFor="model-api-key"
             >
               {credential ? (

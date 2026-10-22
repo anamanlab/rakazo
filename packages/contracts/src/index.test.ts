@@ -181,6 +181,23 @@ describe("contracts", () => {
     ).toBe(true);
   });
 
+  it("rejects unsafe account routing for direct Workers AI connections", () => {
+    expect(
+      ModelConnectInputSchema.safeParse({
+        provider: "cloudflare-workers-ai",
+        apiKey: "cf-test-key-value",
+        accountId: "../account",
+      }).success,
+    ).toBe(false);
+    expect(
+      ModelConnectInputSchema.safeParse({
+        provider: "cloudflare-workers-ai",
+        apiKey: "cf-test-key-value",
+        accountId: "acct1234",
+      }).success,
+    ).toBe(true);
+  });
+
   it("lets a built-in connection update maxTokens without a new API key", () => {
     expect(
       ModelConnectInputSchema.safeParse({ provider: "anthropic", maxTokens: 8192 }).success,
