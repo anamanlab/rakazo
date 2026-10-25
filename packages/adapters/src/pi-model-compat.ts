@@ -1,7 +1,7 @@
 import type { MutableModels } from "@earendil-works/pi-ai";
 import { canonicalPiProviderId } from "@rakazo/contracts";
 
-/** Preserve saved provider references and the Bedrock India strict-tools guard. */
+/** Apply provider protocol capabilities before catalog and runtime selection. */
 export function applyPiModelCompatibility(models: MutableModels): MutableModels {
   const provider = models.getProvider?.("amazon-bedrock");
   if (provider) {

@@ -50,12 +50,14 @@ import { withCloudflareModelAuth } from "./cloudflare-ai-gateway.js";
 import { pruneForRebuild } from "./context-pruning.js";
 import { shortenToolResultText } from "./context-selection.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+import { groqRequestContextWindow } from "./groq-request-budget.js";
 import { estimateModelContextTokens } from "./model-context.js";
 import { IMAGE_RETURNING_COMPUTER_TOOLS } from "./model-vision.js";
 import {
   normalizeOpenAiToolParameters,
   openAiToolParametersNeedNormalization,
 } from "./openai-tool-parameters.js";
+import { affordableOpenRouterOutput } from "./openrouter-output-budget.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
@@ -340,8 +342,15 @@ export class PiAgentRuntime implements AgentRuntime {
           credentialScope: apiKey,
           imageTokens: estimatePiImageTokens,
         });
+        const contextPolicyFor = (target: RuntimeModelTarget) =>
+          createRuntimeContextPolicy({ ...request, model: target.config }, context, {
+            credentialScope: target.credentials?.accessToken ?? target.apiKey,
+            imageTokens: estimatePiImageTokens,
+          });
+        const prepareContext = (ctx: Context, m: Model<Api>) =>
+          contextPolicy.prepareContext(ctx, m);
         const usageHooks = {
-          prepareContext: contextPolicy.prepareContext,
+          prepareContext,
           imageTokens: estimatePiImageTokens,
           recordUsage: request.onUsage,
           onUsage: (usage: AgentUsage) => {
@@ -386,23 +395,24 @@ export class PiAgentRuntime implements AgentRuntime {
                   { operationKind: request.usageOperationKind ?? "answer" },
                   {
                     ...usageHooks,
-                    prepareContext: (ctx, m) => contextPolicy.prepareContext(ctx, m),
+                    prepareContext: (ctx, m) => prepareContext(ctx, m),
                     onProviderError: (message) => providerFailures.add(message.content),
                   },
                 ),
               target.config.cacheCapabilities?.retentionMode,
             ),
+          onContextLimit: (contextWindow) => {
+            const target = resizeRuntimeTarget(activeStreamTarget, contextWindow);
+            activeStreamTarget = target;
+            host.activeModel = target;
+            host.model = target.model;
+            agent.state.model = target.model;
+            contextPolicy = contextPolicyFor(target);
+          },
           onSwitch: async (target) => {
             await request.onModelChange?.(target.config.provider, target.config.id);
             activeStreamTarget = target;
-            contextPolicy = createRuntimeContextPolicy(
-              { ...request, model: target.config },
-              context,
-              {
-                credentialScope: target.credentials?.accessToken ?? target.apiKey,
-                imageTokens: estimatePiImageTokens,
-              },
-            );
+            contextPolicy = contextPolicyFor(target);
             host.activeModel = target;
             const nextThinkingLevel = thinkingLevelFor(
               target.model,
@@ -1445,7 +1455,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     agentNamespace: agentId,
     pendingShells: [],
   };
-  const contextPolicy = createRuntimeContextPolicy(
+  let contextPolicy = createRuntimeContextPolicy(
     {
       ...host.request,
       model: requestModel,
@@ -1465,6 +1475,23 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     attempted: new Set(),
     nextIndex: 0,
     onSwitch: async () => undefined,
+    onContextLimit: (contextWindow) => {
+      const target = resizeRuntimeTarget(nestedHost.activeModel, contextWindow);
+      nestedHost.activeModel = target;
+      nestedHost.model = target.model;
+      nested.state.model = target.model;
+      contextPolicy = createRuntimeContextPolicy(
+        {
+          ...host.request,
+          model: target.config,
+          history: [],
+          prompt: task,
+          sourceMessageId: undefined,
+        },
+        host.context,
+        { credentialScope: target.apiKey, imageTokens: estimatePiImageTokens },
+      );
+    },
     isProviderFailure: (message) => providerFailures.has(message.content),
     stream: (target, ctx, options) =>
       reliableModelStream(
@@ -2293,6 +2320,18 @@ interface RuntimeModelTarget {
   credentials?: PiRuntimeCredentialStore;
 }
 
+/** A provider request ceiling applies only to this run, never to saved connection settings. */
+function resizeRuntimeTarget(
+  target: RuntimeModelTarget,
+  contextWindow: number,
+): RuntimeModelTarget {
+  return {
+    ...target,
+    config: { ...target.config, contextWindow },
+    model: { ...target.model, contextWindow },
+  };
+}
+
 interface FallbackStreamState {
   request: AgentRunRequest;
   getActive(): RuntimeModelTarget;
@@ -2300,9 +2339,12 @@ interface FallbackStreamState {
   attempted: Set<string>;
   nextIndex: number;
   onSwitch(target: RuntimeModelTarget): Promise<void>;
+  onContextLimit(contextWindow: number): void;
   isProviderFailure(message: AssistantMessage): boolean;
   /** Set once a provider rejected replayed thinking signatures; see thinking-signatures.ts. */
   dropThinkingBlocks?: boolean;
+  /** Output reservations reduced by a rejected request, scoped to this run and model. */
+  outputCaps?: Map<string, number>;
   /**
    * Messages written before the last switch to a backup model. Their thinking is bound to the
    * model and transcript it was written for, and the backup's policy starts with a rebuild that
@@ -2517,20 +2559,31 @@ function fallbackAwareModelStream(
   const run = async () => {
     let buffered: AssistantMessageEvent[] = [];
     let retries = 0;
+    let recoveredIdle = false;
+    let sizingFailure: Extract<AssistantMessageEvent, { type: "error" }> | undefined;
     // Bound same-model retries. Explicit backups retain their per-model header
     // timeout: a post-header idle watchdog can already exceed that timeout.
-    const startedAt = Date.now();
+    let startedAt = Date.now();
     const timeoutMs = options?.timeoutMs ?? MODEL_STREAM_TIMEOUT_MS;
     let firstRetryableError: Extract<AssistantMessageEvent, { type: "error" }> | undefined;
     while (!signalAborted()) {
       const remainingMs = timeoutMs - (Date.now() - startedAt);
-      if (retries > 0 && firstRetryableError && remainingMs <= 0) {
-        output.push(firstRetryableError);
-        output.end(firstRetryableError.error);
+      const failure = firstRetryableError ?? sizingFailure;
+      if ((retries > 0 || sizingFailure) && remainingMs <= 0 && failure) {
+        output.push(failure);
+        output.end(failure.error);
         return;
       }
-      const attemptOptions = retries > 0 ? { ...options, timeoutMs: remainingMs } : options;
       const target = state.getActive();
+      const targetKey = JSON.stringify([target.config.provider, target.config.id]);
+      const outputCap = state.outputCaps?.get(targetKey);
+      const attemptOptions = {
+        ...options,
+        ...(retries > 0 || sizingFailure ? { timeoutMs: remainingMs } : {}),
+        ...(outputCap !== undefined
+          ? { maxTokens: Math.min(outputCap, options?.maxTokens ?? outputCap) }
+          : {}),
+      };
       lastPartial = undefined;
       let sawPartialOutput = false;
       let restart = false;
@@ -2567,6 +2620,60 @@ function fallbackAwareModelStream(
               !hasTerminalPartialOutput &&
               event.reason === "error" &&
               !signalAborted() &&
+              !sizingFailure &&
+              state.isProviderFailure(event.error)
+            ) {
+              const contextWindow = groqRequestContextWindow(
+                target.config.provider,
+                event.error.errorMessage,
+                target.model.contextWindow,
+              );
+              if (contextWindow !== undefined && Date.now() - startedAt < timeoutMs) {
+                state.onContextLimit(contextWindow);
+                getLogger().info("model.context_limit.reduced", {
+                  runId: state.request.runId,
+                  provider: target.config.provider,
+                  model: target.config.id,
+                  contextWindow,
+                });
+                sizingFailure = event;
+                buffered = [];
+                restart = true;
+                break;
+              }
+              const currentLimit = resolveCompletionMaxTokens(
+                target.model.maxTokens,
+                target.config.maxTokens,
+                attemptOptions.maxTokens,
+                target.model.reasoning,
+                target.model.contextWindow,
+              );
+              const affordable = affordableOpenRouterOutput(
+                target.config.provider,
+                event.error.errorMessage,
+                currentLimit,
+              );
+              if (affordable !== undefined && Date.now() - startedAt < timeoutMs) {
+                state.outputCaps ??= new Map();
+                state.outputCaps.set(targetKey, affordable);
+                getLogger().info("model.output_reservation.reduced", {
+                  runId: state.request.runId,
+                  provider: target.config.provider,
+                  model: target.config.id,
+                  requestedMaxTokens: currentLimit,
+                  effectiveMaxTokens: affordable,
+                });
+                sizingFailure = event;
+                buffered = [];
+                restart = true;
+                break;
+              }
+            }
+            if (
+              !sawPartialOutput &&
+              !hasTerminalPartialOutput &&
+              event.reason === "error" &&
+              !signalAborted() &&
               !state.dropThinkingBlocks &&
               isThinkingSignatureMismatch(event.error.errorMessage)
             ) {
@@ -2598,8 +2705,17 @@ function fallbackAwareModelStream(
               // within the retry budget, so only transient failures retry the same model.
               if (isTransientModelError(event.error)) {
                 firstRetryableError ??= event;
+                const idle = event.error.errorMessage === CODEX_STREAM_IDLE_TIMEOUT_MESSAGE;
+                const delay = idle
+                  ? recoveredIdle
+                    ? undefined
+                    : MODEL_PROVIDER_RETRY_DELAYS_MS[0]
+                  : MODEL_PROVIDER_RETRY_DELAYS_MS[retries];
+                if (idle && delay !== undefined) {
+                  recoveredIdle = true;
+                  startedAt = Date.now();
+                }
                 // Every retry, including its backoff, shares the original budget.
-                const delay = MODEL_PROVIDER_RETRY_DELAYS_MS[retries];
                 if (delay !== undefined && Date.now() - startedAt + delay < timeoutMs) {
                   retries += 1;
                   await abortableDelay(delay, signal);
@@ -2722,6 +2838,7 @@ export function isCodexModel(model: Pick<Model<Api>, "api" | "provider">): boole
 
 /** Abort reason recorded when a Codex stream goes silent past the idle bound. */
 export const CODEX_STREAM_IDLE_TIMEOUT_MESSAGE = "Codex stream idle timeout";
+export const MODEL_STREAM_IDLE_TIMEOUT_MESSAGE = CODEX_STREAM_IDLE_TIMEOUT_MESSAGE;
 
 export interface StreamIdleWatchdog {
   /** Composed abort signal to hand to the provider request. */

@@ -6,6 +6,10 @@ export const MISSING_TOOL_FINAL_RESPONSE_ERROR =
 /** The API rejects a send with this message until the user can reach a model. */
 export const MODEL_REQUIRED_SEND_ERROR = "Connect a model to start a run.";
 
+/** Refusal raised when a model's context window cannot fit fixed prompt requirements. */
+export const MODEL_CONTEXT_TOO_SMALL_ERROR =
+  "This model's context window is too small. Choose another model.";
+
 const APP_RUN_ERRORS = new Set([MISSING_TOOL_FINAL_RESPONSE_ERROR, ...stuckWorkStatusMessages()]);
 
 export const RUN_ERROR_LIMIT_MESSAGES = {
