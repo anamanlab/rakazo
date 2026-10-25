@@ -1,0 +1,16 @@
+[Unit]
+Description=Create and verify a Rakazo managed Neon database backup
+After=network-online.target
+Wants=network-online.target
+OnFailure=rakazo-backup-alert.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/rakazo/backup.env
+ExecStart=/srv/rakazo/infra/scripts/neon-backup.sh --alert-on-failure
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups
