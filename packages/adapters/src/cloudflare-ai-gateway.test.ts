@@ -271,4 +271,21 @@ describe("Cloudflare AI Gateway auth", () => {
     const options = { apiKey: "sk-test-key-123" };
     expect(withCloudflareModelAuth({ provider: "openai" }, options)).toBe(options);
   });
+
+  it("injects cf-aig-collect-log-payload: false to disable raw prompt logging", async () => {
+    const model = {
+      provider: CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
+      accountId: ACCOUNT_ID,
+      gatewayId: GATEWAY_ID,
+    };
+    const options = withCloudflareModelAuth(model, {
+      apiKey: API_KEY,
+    });
+    expect(options?.transformHeaders).toBeDefined();
+    const headers = await options!.transformHeaders!({
+      Authorization: `Bearer ${API_KEY}`,
+    });
+    expect(headers["cf-aig-collect-log-payload"]).toBe("false");
+    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+  });
 });

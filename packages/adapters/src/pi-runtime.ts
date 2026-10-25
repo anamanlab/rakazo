@@ -152,10 +152,14 @@ const AGENT_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const MAX_AGENT_TOOL_NAME_LENGTH = 64;
 const FALLBACK_AGENT_TOOL_NAME = "connector_tool";
 
-/** Optional self-host fuse. Unset, empty, or 0 means unlimited (default). */
+/** Safe server-side default turn ceiling when MAX_TOOL_CALLS_PER_TURN is unset or empty. */
+export const DEFAULT_MAX_TOOL_CALLS_PER_TURN = 25;
+
+/** Server-side tool-call fuse. Unset or empty defaults to 25. "0" or "unlimited" means unconstrained. */
 export function maxToolCallsPerTurn(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.MAX_TOOL_CALLS_PER_TURN?.trim();
-  if (!raw) return 0;
+  if (raw === undefined || raw === "") return DEFAULT_MAX_TOOL_CALLS_PER_TURN;
+  if (raw.toLowerCase() === "unlimited") return 0;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.floor(parsed);

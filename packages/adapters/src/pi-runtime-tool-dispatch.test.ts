@@ -378,6 +378,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
 
 import { toolCompletionAuditPayload } from "./executor.js";
 import {
+  DEFAULT_MAX_TOOL_CALLS_PER_TURN,
   MISSING_TOOL_FINAL_RESPONSE_ERROR,
   maxToolCallsPerTurn,
   PiAgentRuntime,
@@ -1629,7 +1630,47 @@ describe("Pi connector tool dispatch", () => {
     });
   });
 
-  it("allows more than 80 tool calls by default when no fuse is configured", async () => {
+  it("bounds tool calls to DEFAULT_MAX_TOOL_CALLS_PER_TURN by default when unset", async () => {
+    fakeAgentState.mode = "parent-limit";
+    const executeTool = vi.fn(async () => ({ ok: true }));
+    const runtime = new PiAgentRuntime();
+    const events: unknown[] = [];
+
+    for await (const event of runtime.run(
+      {
+        botId: "b",
+        threadId: "t",
+        runId: "default-bounded",
+        prompt: "keep going",
+        instructions: "Use shell.",
+        history: [],
+        tools: [shellTool],
+        model: { provider: "test", id: "dispatch-test-model" },
+        executeTool,
+      },
+      {
+        operationId: "2a",
+        traceId: "2a",
+        spaceId: "w",
+        userId: "u",
+        signal: new AbortController().signal,
+      },
+    )) {
+      events.push(event);
+    }
+
+    expect(executeTool).toHaveBeenCalledTimes(DEFAULT_MAX_TOOL_CALLS_PER_TURN);
+    expect(fakeAgentState.abortCount).toBeGreaterThanOrEqual(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "progress",
+        text: `Stopped: more than ${DEFAULT_MAX_TOOL_CALLS_PER_TURN} tool calls in one turn.`,
+      }),
+    );
+  });
+
+  it("allows more than 80 tool calls when MAX_TOOL_CALLS_PER_TURN is explicitly 0 or unlimited", async () => {
+    process.env.MAX_TOOL_CALLS_PER_TURN = "0";
     fakeAgentState.mode = "parent-limit";
     const executeTool = vi.fn(async () => ({ ok: true }));
     const runtime = new PiAgentRuntime();
@@ -1783,11 +1824,12 @@ describe("Pi connector tool dispatch", () => {
     );
   });
 
-  it("treats unset, empty, and non-positive MAX_TOOL_CALLS_PER_TURN as unlimited", () => {
-    expect(maxToolCallsPerTurn({})).toBe(0);
-    expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "" })).toBe(0);
+  it("treats unset and empty MAX_TOOL_CALLS_PER_TURN as safe default and 0/non-positive as unlimited", () => {
+    expect(maxToolCallsPerTurn({})).toBe(DEFAULT_MAX_TOOL_CALLS_PER_TURN);
+    expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "" })).toBe(DEFAULT_MAX_TOOL_CALLS_PER_TURN);
     expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "0" })).toBe(0);
     expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "-5" })).toBe(0);
+    expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "unlimited" })).toBe(0);
     expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "abc" })).toBe(0);
     expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: "80" })).toBe(80);
     expect(maxToolCallsPerTurn({ MAX_TOOL_CALLS_PER_TURN: " 12.9 " })).toBe(12);
