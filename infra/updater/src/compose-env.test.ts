@@ -52,6 +52,7 @@ const NOT_PASSED: Record<string, string> = {
   COMPOSE_PROJECT_NAME: "read by the updater sidecar, which has its own environment",
   RAKAZO_COMPOSE_PROJECT_NAME: "read by the updater sidecar, which has its own environment",
   RAKAZO_IMAGE_TAG_PREVIOUS: "read by the updater sidecar, which has its own environment",
+  WORKER_HEARTBEAT_PATH: "defaults to /tmp/worker-heartbeat.json for container healthcheck",
 };
 
 /**
