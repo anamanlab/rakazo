@@ -52,6 +52,7 @@ export default defineConfig({
       "apps/worker/src/**/*.test.ts",
       "apps/www/src/**/*.test.ts",
       "apps/www-edge/src/**/*.test.ts",
+      "apps/web-edge/src/**/*.test.ts",
     ],
     testTimeout: 30_000,
     hookTimeout: 60_000,

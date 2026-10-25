@@ -12,13 +12,15 @@ export interface Env {
   ASSETS: Fetcher;
   /** The origin that serves the API, reached through the tunnel. */
   ORIGIN: string;
+  /** The git commit SHA of this build. */
+  GIT_SHA?: string;
 }
 
 /**
  * Paths that belong to the API rather than the document. These are the only ones the
  * Worker forwards; everything else is answered by the asset worker at the edge.
  */
-const PROXIED_PREFIXES = ["/api", "/rpc", "/mcp", "/.well-known", "/novnc", "/health"];
+const PROXIED_PREFIXES = ["/api", "/rpc", "/mcp", "/.well-known", "/novnc", "/health", "/ready"];
 
 function isProxied(pathname: string): boolean {
   return PROXIED_PREFIXES.some(
@@ -29,6 +31,9 @@ function isProxied(pathname: string): boolean {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) {
+      return new Response("Not Found", { status: 404 });
+    }
     if (!isProxied(url.pathname)) return env.ASSETS.fetch(request);
     return proxyToOrigin(request, env.ORIGIN);
   },

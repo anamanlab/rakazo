@@ -70,6 +70,16 @@ describe("health routes", () => {
     }
   });
 
+  it("includes release revision on /ready when configured", async () => {
+    const response = await app.request("/ready");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      degraded: false,
+      revision: "abc123",
+    });
+  });
+
   it("keeps public liveness free of deployment details", async () => {
     const response = await app.request("/health");
     expect(response.status).toBe(200);

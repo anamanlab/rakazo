@@ -7,6 +7,7 @@
   "scripts": {
     "deploy": "cf deploy",
     "types": "cf workers types",
+    "test": "vitest run --root ../.. apps/web-edge/src",
     "check": "cf workers types && tsc --noEmit -p tsconfig.json",
     "bundle": "cf build"
   },

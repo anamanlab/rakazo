@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type { JobPublisher, JobWorkerHost } from "@rakazo/adapter-kit";
 import { ComposioConnector, IntegrationProviderSettings } from "@rakazo/adapters";
 import { phoneCallSettings } from "@rakazo/core";
@@ -311,10 +312,33 @@ async function main() {
   });
   reconciler.start();
 
+  const heartbeatPath = process.env.WORKER_HEARTBEAT_PATH ?? "/tmp/worker-heartbeat.json";
+  const recordHeartbeat = () => {
+    try {
+      fs.writeFileSync(
+        heartbeatPath,
+        JSON.stringify({
+          timestamp: Date.now(),
+          pid: process.pid,
+          degraded: secrets.describe().capabilities.degraded ?? false,
+        }),
+      );
+    } catch (err) {
+      logger.warn("worker heartbeat write failed", { error: String(err) });
+    }
+  };
+  recordHeartbeat();
+  const heartbeatTimer = setInterval(recordHeartbeat, 10_000);
+  heartbeatTimer.unref?.();
+
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
+    clearInterval(heartbeatTimer);
+    try {
+      if (fs.existsSync(heartbeatPath)) fs.unlinkSync(heartbeatPath);
+    } catch {}
     try {
       await reconciler.stop();
       await jobHost.stop();

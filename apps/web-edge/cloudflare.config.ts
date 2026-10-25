@@ -10,6 +10,7 @@ import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 const host = process.env.RAKAZO_EDGE_HOST ?? "app.example.com";
 const zone = process.env.RAKAZO_EDGE_ZONE ?? "example.com";
 const origin = process.env.RAKAZO_EDGE_ORIGIN ?? "https://origin.example.com";
+const gitSha = process.env.RAKAZO_GIT_SHA ?? process.env.GITHUB_SHA ?? "";
 
 /**
  * The app is same-origin by construction: it builds every API URL from
@@ -42,11 +43,15 @@ export default defineConfig({
         "/.well-known/*",
         "/novnc/*",
         "/health",
+        "/ready",
+        "/internal",
+        "/internal/*",
       ],
     },
     env: {
       ASSETS: bindings.assets(),
       ORIGIN: bindings.text(origin),
+      ...(gitSha ? { GIT_SHA: bindings.text(gitSha) } : {}),
     },
     observability: {
       enabled: true,

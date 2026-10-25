@@ -233,7 +233,7 @@ services:
         - CMD
         - node
         - -e
-        - fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+        - fetch('http://127.0.0.1:3100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 20
@@ -265,6 +265,23 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const fs = require('fs');
+          try {
+            const data = JSON.parse(fs.readFileSync('/tmp/worker-heartbeat.json', 'utf8'));
+            if (Date.now() - data.timestamp > 30000) process.exit(1);
+          } catch {
+            process.exit(1);
+          }
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   web:
     image: ${RAKAZO_IMAGE:-rakazo/app}:${RAKAZO_IMAGE_TAG:-local}
