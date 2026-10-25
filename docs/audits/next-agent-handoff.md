@@ -15,12 +15,16 @@
 - **Post-P0 Prisma Text Sanitization & Clean Keys (PR #12, `aa876a9a`):** Added middleware to sanitize NUL bytes and unpaired surrogates preventing Postgres 22P05 failures on prompt writes; cleaned unsafe JSON keys while safely preserving data prototypes; added Chromium profile lock retry logic.
 - **Post-P0 Compatible Chat Completions Request Normalization (PR #13, `f9220e99`):** Generalized developer role restrictions and merged consecutive user prompts for non-OpenAI endpoints (Groq, Xiaomi, Qwen); stripped unsupported `uniqueItems` schema keyword for compatible engines.
 - **Post-P0 Test Conformance for Worker Heartbeat & MCP SDK 1.31 (PR #14, `7237ff70`):** Aligned compose environment allowlist test with worker heartbeat healthcheck; supplied issuer metadata in MCP transport OAuth tests matching SDK 1.31 expectations.
+- **Handoff Documentation & Release Status (PR #15, `08d3246e`):** Documented completed stabilization deliverables and release readiness checklist.
 
 ## Current verified state
 
-- **Repository HEAD:** `main` at `7237ff70` (synchronized with `origin/main`).
+- **Repository HEAD:** `main` at `08d3246e` (synchronized with `origin/main`).
 - **Monorepo Typecheck:** All 24 packages and apps pass typecheck cleanly (`turbo check --concurrency 2` exited 0).
 - **Test Suite:** Over 815 test files and 12,336 tests pass offline deterministically.
+- **Production Edge Deployment:**
+  - App edge Worker (`rakazo-web`) deployed to production edge with version `644d4be0-4b1e-4685-9782-6e476db4cbea` stamped with git SHA `08d3246e`. Live `/health` verified (HTTP 200) and edge route protection verified (`/internal/readiness` returning HTTP 404 at edge).
+  - Marketing site edge Worker (`rakazo-www`) deployed to production edge with version `021e05a8-f4bc-4ad1-808d-44f9d8cf1155`. Live site verified (HTTP 200).
 - **Security & Hygiene:** Zero secrets, zero connection strings, zero personal accounts or private hostnames in code, commit history, PR bodies, or docs.
 - **Public Artifacts:** All PR descriptions adhere to public repository guidelines with product reasons, changes, and verification summaries.
 
