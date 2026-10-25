@@ -311,6 +311,10 @@ neon api /projects/<project-id> | jq '.project | {compute_time_seconds, active_t
 running at. Multiply it by the seconds of running time you need and compare the
 result against the monthly allowance to see how long the month has to fit in.
 
+### Backup and Disaster Recovery
+
+For automated encrypted logical backups, point-in-time branch restores, and recovery rehearsal drills, follow the runbook in [neon-disaster-recovery.md](./neon-disaster-recovery.md).
+
 ---
 
 ## 6. Checking the deployment

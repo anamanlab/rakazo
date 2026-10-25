@@ -4,7 +4,10 @@ umask 077
 
 PROJECT_DIR="${RAKAZO_DEPLOY_DIR:-/srv/rakazo}"
 [[ "${PROJECT_DIR}" == /* ]] || { echo "RAKAZO_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
-COMPOSE_FILE="${PROJECT_DIR}/infra/compose/docker-compose.prod.yml"
+COMPOSE_FILE="${RAKAZO_COMPOSE_FILE:-${PROJECT_DIR}/infra/compose/docker-compose.prod.yml}"
+if [[ ! -f "${COMPOSE_FILE}" && -f "${PROJECT_DIR}/infra/compose/docker-compose.managed.yml" ]]; then
+  COMPOSE_FILE="${PROJECT_DIR}/infra/compose/docker-compose.managed.yml"
+fi
 ENV_FILE="${PROJECT_DIR}/.env"
 BACKUP_ROOT="/var/backups/rakazo"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -171,13 +174,39 @@ output_limit() {
 seal() {
   if [[ -n "${suffix}" ]]; then age --encrypt "${age_args[@]}" -o "$1"; else cat >"$1"; fi
 }
+has_compose_postgres() {
+  "${compose[@]}" ps -q postgres 2>/dev/null | grep -q .
+}
+
 dump_database() {
-  "${compose[@]}" exec -T postgres sh -c \
-    'pg_dump --format=custom --no-owner --no-privileges -U "$POSTGRES_USER" "$POSTGRES_DB"'
+  if has_compose_postgres; then
+    "${compose[@]}" exec -T postgres sh -c \
+      'pg_dump --format=custom --no-owner --no-privileges -U "$POSTGRES_USER" "$POSTGRES_DB"'
+  elif [[ -n "${RAKAZO_BACKUP_DATABASE_URL:-}" ]] || [[ -n "${DATABASE_URL:-}" ]]; then
+    local target_url="${RAKAZO_BACKUP_DATABASE_URL:-${DATABASE_URL:-}}"
+    pg_dump --format=custom --no-owner --no-privileges --dbname="${target_url}"
+  else
+    local env_url=""
+    if [[ -f "${ENV_FILE}" ]]; then
+      env_url="$(grep -E '^(RAKAZO_BACKUP_DATABASE_URL|DATABASE_MIGRATION_URL|DATABASE_URL)=' "${ENV_FILE}" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"'"'" || true)"
+    fi
+    if [[ -n "${env_url}" ]]; then
+      pg_dump --format=custom --no-owner --no-privileges --dbname="${env_url}"
+    else
+      "${compose[@]}" exec -T postgres sh -c \
+        'pg_dump --format=custom --no-owner --no-privileges -U "$POSTGRES_USER" "$POSTGRES_DB"'
+    fi
+  fi
 }
 # Verifiers read the plaintext stream to its end, so verification needs no private key.
 verify_database() {
-  "${compose[@]}" exec -T postgres sh -c 'pg_restore --list >/dev/null && cat >/dev/null'
+  if has_compose_postgres; then
+    "${compose[@]}" exec -T postgres sh -c 'pg_restore --list >/dev/null && cat >/dev/null'
+  elif command -v pg_restore >/dev/null; then
+    pg_restore --list >/dev/null && cat >/dev/null
+  else
+    "${compose[@]}" exec -T postgres sh -c 'pg_restore --list >/dev/null && cat >/dev/null'
+  fi
 }
 archive_appdata() { tar -czf - --numeric-owner -C "${appdata}" .; }
 verify_appdata() { tar -tzf - >/dev/null && cat >/dev/null; }
