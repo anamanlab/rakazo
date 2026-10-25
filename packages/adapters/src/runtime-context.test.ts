@@ -18,7 +18,7 @@ function fixture(count = 30) {
     id: `message-${index}`,
     createdAt: "2026-01-01T00:00:00Z",
     role: "user" as const,
-    content: `Original discussion ${index}: ${"synthetic history ".repeat(30)}`,
+    content: `Original discussion ${index}: ${"synthetic history ".repeat(100)}`,
   }));
   const request: AgentRunRequest = {
     botId: "bot",
@@ -49,6 +49,7 @@ function enableHistoryRetrieval(request: AgentRunRequest) {
   }));
   request.executeTool = async () => ({});
 }
+
 describe("runtime context policy", () => {
   it("preserves fitting history with oversized output and warns once per policy", () => {
     const { request, context } = fixture(30);
@@ -218,7 +219,7 @@ describe("runtime context policy", () => {
       readOnly: false,
       content: `---\nname: daily-brief\n---\n${"1. Step kept for skill_update.\n".repeat(80)}`,
     });
-    const shellOutput = "synthetic shell output ".repeat(100);
+    const shellOutput = "synthetic shell output ".repeat(1500);
     context.messages.push(
       call("read", "skill_read"),
       result("read", "skill_read", skill),
@@ -226,7 +227,7 @@ describe("runtime context policy", () => {
       result(
         "fleet",
         "list_fleet",
-        JSON.stringify({ bot: { instructionsVersion: "v2", instructions: "x".repeat(20_000) } }),
+        JSON.stringify({ bot: { instructionsVersion: "v2", instructions: "0".repeat(20_000) } }),
       ),
       call("shell-1", "shell"),
       result("shell-1", "shell", shellOutput),
@@ -249,7 +250,7 @@ describe("runtime context policy", () => {
       return message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
     };
     expect(body("fleet")).toBe(
-      JSON.stringify({ bot: { instructionsVersion: "v2", instructions: "x".repeat(20_000) } }),
+      JSON.stringify({ bot: { instructionsVersion: "v2", instructions: "0".repeat(20_000) } }),
     );
     expect(skill.length).toBeGreaterThan(2500);
     expect(body("read")).toBe(skill);
@@ -263,7 +264,7 @@ describe("runtime context policy", () => {
     "retains individual parallel results within a %i budget",
     (contextWindow) => {
       const { request, context } = fixture(0);
-      const bodies = Array.from({ length: 4 }, (_, i) => `${i}: ${"evidence ".repeat(400)}`);
+      const bodies = Array.from({ length: 4 }, (_, i) => `${i}: ${"evidence ".repeat(1333)}`);
       context.messages.push({
         role: "assistant",
         content: bodies.slice(0, 3).map((_, i) => ({

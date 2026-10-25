@@ -138,7 +138,8 @@ export function isRetryableProviderUnavailable(error: unknown): boolean {
  * structured status fields.
  */
 export function isTransientModelError(error: unknown): boolean {
-  const { text } = errorFacts(error);
+  const { text, statuses } = errorFacts(error);
+  if (statuses.has(402)) return false;
   // Short rate windows can reset during a retry; subscription and billing limits cannot.
   const shortWindow =
     /\bper[- ](?:second|minute)\b|\b(?:rpm|tpm)\b|retry[- ]after[: ]+\d+(?:\.\d+)?\s*(?:seconds?|secs?|s)\b/.test(
