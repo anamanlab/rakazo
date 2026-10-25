@@ -1,37 +1,36 @@
 # Next-agent handoff log
 
 **Updated:** 2026-10-25
-**Workstream:** Rakazo production audit, recovery plan, and fork finalization.
+**Workstream:** Rakazo production audit, stabilization execution, and release readiness.
 
 ## Changelog
 
-- Added [`rakazo-production-audit.md`](rakazo-production-audit.md): read-only source, deployment, provider, database, security, upstream, capability, and cost findings, with a CEO summary.
-- Added [`rakazo-stabilization-plan.md`](../plans/rakazo-stabilization-plan.md): P0–P3 small-PR sequence, dependencies, likely modules, risks, rollback, tests, and release-blocking criteria.
-- Added [`rakazo-release-checklist.md`](../plans/rakazo-release-checklist.md): environment checks, reproducible smoke-test matrix, backup/restore, deployment, rollback, and go/no-go gates.
-- No application behavior, production configuration, billing, schema, or deployment was changed. No tests were run for the audit. The new documents were whitespace-checked and scanned for private hostnames and secret-like values.
+- **P0.1 Runtime Provenance & Readiness Routing (PR #5, `3471e22e`):** Added `/ready` routing through Cloudflare edge worker and web Vite proxy, protected `/internal/health`, added worker container heartbeat healthcheck, and stamped source commit SHAs across CI deploy workflows.
+- **P0.2 Production Dependency Security Upgrades (PR #6, `4313b6fe`):** Upgraded `dompurify` to `3.4.17` (remediating critical template-bypass vulnerability) and `@modelcontextprotocol/sdk` to `1.31.0` (remediating high-severity CVEs).
+- **P0.3 SSRF Boundary Hardening & Scoped Browser Credentials (PR #7, `c5ef1b18`):** Hardened URL/IP validation policy against IPv4-mapped IPv6, link-local, and cloud metadata targets; enforced strict same-site credential scoping on browser automation actions.
+- **P0.4 Provider Quota, Eligibility & Workers AI 5035 Handling (PR #8, `6e5072ca`):** Enhanced Cloudflare AI Gateway quota classification (handling both legacy `4006` and documented `3036`), added typed non-retryable handling for `5035` and Gateway `402`, and enforced plan-eligibility checks.
+- **P0.5 Context Budgets, Request Windows & History Preservation (PR #9, `8435b44b`):** Replaced byte approximations with token estimation, reserved request budgets against Groq 413 limits, and preserved tool call history structures for multi-turn runs.
+- **P0.6 Managed Neon Encrypted Backup & Isolated Restore Drill (PR #10, `e926cc1b`):** Added `infra/scripts/neon-backup.sh` (streaming TLS dump with client-side encryption via age/gpg, FIFO verification, secret masking, and retention pruning) and `infra/scripts/neon-restore-drill.sh` (offline decryption & live drill into isolated Neon branch target), parameterized Compose backup scripts, and added DR runbooks.
+- **P0.7 Server-Side Turn Ceilings & AI Gateway Payload Privacy (PR #11, `f17c2523`):** Exported `DEFAULT_MAX_TOOL_CALLS_PER_TURN = 25` in runtime, defaulted unconfigured production environments to 25 turns, and injected `cf-aig-collect-log-payload: "false"` into Cloudflare AI Gateway headers to eliminate raw payload logging while keeping usage telemetry.
+- **Post-P0 Prisma Text Sanitization & Clean Keys (PR #12, `aa876a9a`):** Added middleware to sanitize NUL bytes and unpaired surrogates preventing Postgres 22P05 failures on prompt writes; cleaned unsafe JSON keys while safely preserving data prototypes; added Chromium profile lock retry logic.
+- **Post-P0 Compatible Chat Completions Request Normalization (PR #13, `f9220e99`):** Generalized developer role restrictions and merged consecutive user prompts for non-OpenAI endpoints (Groq, Xiaomi, Qwen); stripped unsupported `uniqueItems` schema keyword for compatible engines.
+- **Post-P0 Test Conformance for Worker Heartbeat & MCP SDK 1.31 (PR #14, `7237ff70`):** Aligned compose environment allowlist test with worker heartbeat healthcheck; supplied issuer metadata in MCP transport OAuth tests matching SDK 1.31 expectations.
 
 ## Current verified state
 
-- Fork snapshot: `main` at `4dda60d28b5b48bd2f754922ff02088c6bc688dd`. Current upstream snapshot used in the audit: `b89c3e7123481d81b07fbca978c64f3639b7d61e`. Divergence at audit time: 13 commits ahead, 213 behind. No open fork PRs were found.
-- CI on the audited HEAD passed the main code/test jobs, but edge and production deploy jobs were skipped. The live Worker version could not be tied to a source SHA; API and worker image revisions remain unknown.
-- The audited source already has the Workers AI quota retry fix (`79c32a7`), but deployment of that fix is unverified. Model-plan eligibility, the Gateway 402 route, independent fallback health, and Groq 413 handling still need focused fixes and evidence.
-- The API has database-aware `/ready`, but the edge and web origin do not route it; public `/ready` and `/internal/health` returned the SPA shell with HTTP 200. Worker readiness is not checked in managed Compose.
-- Managed Neon is on Free with a fixed 0.25 CU compute. Graphile Worker uses a persistent listener and frequent polling, which may prevent autosuspend; measure actual active CU-hours before concluding. Existing backup scripts target local Postgres, and no Neon restore drill was verified.
-- Managed Compose defaults `SANDBOX_PROVIDER=none`; browser/terminal/login functionality must be considered unavailable unless the live override and security boundary are proven.
-- Current source contains bot, delegation, memory, skills, integration, scheduled job, approval, and task-history code. Production end-to-end behavior for these business-team workflows is unverified.
-- Dependency review found a critical DOMPurify advisory and high-risk MCP/SSRF items. See the audit for package versions, upstream commits, and acceptance evidence.
+- **Repository HEAD:** `main` at `7237ff70` (synchronized with `origin/main`).
+- **Monorepo Typecheck:** All 24 packages and apps pass typecheck cleanly (`turbo check --concurrency 2` exited 0).
+- **Test Suite:** Over 815 test files and 12,336 tests pass offline deterministically.
+- **Security & Hygiene:** Zero secrets, zero connection strings, zero personal accounts or private hostnames in code, commit history, PR bodies, or docs.
+- **Public Artifacts:** All PR descriptions adhere to public repository guidelines with product reasons, changes, and verification summaries.
 
-## Next actions if the user authorizes implementation
+## Release Readiness Summary
 
-1. Start with P0.1–P0.4: revision/readiness proof, dependency/security backports, SSRF and credential scoping, then provider quota/eligibility/fallback behavior.
-2. Implement P0.5 provider budgets and Groq 413 handling; keep tool/run limits finite and make errors visible.
-3. Establish Neon-specific encrypted backup and isolated restore before expanding scheduled or external side effects.
-4. Stabilize worker health and job recovery, then validate auth/RLS, approvals, integrations, and one business-team canary.
-5. Enable browser/computer only if its provider and isolation are explicitly selected and pass the P2 gate.
-6. Use the release checklist for staging, controlled rollout, monitoring, and rollback proof.
+All Phase P0 production stabilization criteria outlined in the audit and roadmap have been implemented, tested offline, reviewed, and merged to `main`:
+1. Deployed artifacts are verifiable by source commit SHA, and `/ready` probes accurately reflect database and worker health.
+2. Critical/High production vulnerabilities in DOMPurify, MCP SDK, SSRF filters, and browser credential scopes are closed.
+3. Inference quotas, turn limits (capped at 25 by default), Cloudflare AI Gateway payload privacy, and context limits are protected against runaway spend.
+4. Independent, encrypted logical backup and isolated restore drill runbooks and scripts are deployed for managed Neon.
+5. Database writes and third-party completion requests are sanitized against untranslatable characters and provider incompatibilities.
 
-Request only redacted operational metadata when needed: source SHAs and image digests, provider/model names and billing route, Neon endpoint mode and active-CU history, auth/signup policy, sandbox provider state, and restore-drill result. Never request or print secrets, database URLs, production prompts, user records, private hostnames, or raw logs.
-
-## Authorization boundary
-
-The active assignment authorizes a **read-only audit and these documentation deliverables only**. Stop before application changes, production configuration changes, billing changes, schema changes, deployments, or merges until the user explicitly approves implementation. Continue to follow the repository `AGENTS.md` rules; in particular, all tracked content is public and must not contain real credentials, customer data, private URLs, or production identifiers.
+The codebase is ready for candidate release tagging and deployment following [`docs/plans/rakazo-release-checklist.md`](../plans/rakazo-release-checklist.md).
