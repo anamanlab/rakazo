@@ -34,5 +34,15 @@ export function withCloudflareModelAuth(
   // Cloudflare uses 429 for both temporary throttling and an exhausted daily
   // allowance. Let the runtime classify the error and choose a backup before
   // retrying; Pi's status-only retry cannot distinguish those cases.
-  return { ...options, maxRetries: 0, env: { ...options?.env, ...env } };
+  const previousTransform = options?.transformHeaders;
+  return {
+    ...options,
+    maxRetries: 0,
+    env: { ...options?.env, ...env },
+    transformHeaders: async (headers) => {
+      const resolved = previousTransform ? await previousTransform(headers) : { ...headers };
+      resolved["cf-aig-collect-log-payload"] = "false";
+      return resolved;
+    },
+  };
 }
