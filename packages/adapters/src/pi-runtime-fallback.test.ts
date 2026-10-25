@@ -551,6 +551,60 @@ describe("Pi runtime ordered model fallback", () => {
     expect(providerState.delay).not.toHaveBeenCalled();
   });
 
+  it("does not retry a plan-ineligible model (Workers AI 5035) when no backup is connected", async () => {
+    providerState.stream.mockImplementation(() =>
+      stream(
+        primary,
+        message(
+          primary,
+          [],
+          "error",
+          "403: The model you are trying to access requires a Workers Paid plan. (code: 5035)",
+        ),
+      ),
+    );
+    await expect(run(request())).rejects.toThrow("requires a Workers Paid plan");
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    expect(providerState.delay).not.toHaveBeenCalled();
+  });
+
+  it("advances to the backup when encountering a plan-ineligible model (Workers AI 5035) without retrying the primary", async () => {
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      target.provider === primary.provider
+        ? stream(
+            target,
+            message(
+              target,
+              [],
+              "error",
+              "403: The model you are trying to access requires a Workers Paid plan. (code: 5035)",
+            ),
+          )
+        : stream(target, message(target, [{ type: "text", text: "Ready" }], "stop")),
+    );
+    const events = await run(
+      request([{ provider: backupA.provider, id: backupA.id, apiKey: "fake-backup-key" }]),
+    );
+    expect(
+      providerState.stream.mock.calls.map(
+        ([target]) => (target as Model<"openai-completions">).provider,
+      ),
+    ).toEqual([primary.provider, backupA.provider]);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Ready" });
+    expect(providerState.delay).not.toHaveBeenCalled();
+  });
+
+  it("keeps invalid credential 403 terminal and does not advance to backup", async () => {
+    providerState.stream.mockImplementation(() =>
+      stream(primary, message(primary, [], "error", "403: Forbidden - Invalid API Token")),
+    );
+    await expect(
+      run(request([{ provider: backupA.provider, id: backupA.id, apiKey: "fake-backup-key" }])),
+    ).rejects.toThrow("Invalid API Token");
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    expect(providerState.delay).not.toHaveBeenCalled();
+  });
+
   it.each(["absent", "empty"])(
     "passes the original stream options and terminal content through with %s backups",
     async (backups) => {

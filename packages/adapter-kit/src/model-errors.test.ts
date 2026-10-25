@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isRetryableProviderUnavailable, isTransientModelError } from "./model-errors.js";
+import {
+  isModelPlanIneligible,
+  isModelQuotaExhausted,
+  isRetryableProviderUnavailable,
+  isTransientModelError,
+} from "./model-errors.js";
 
 describe("transient model errors", () => {
   it.each([
@@ -72,6 +77,25 @@ describe("transient model errors", () => {
       "Out of budget.",
       "You've reached your monthly usage limit; retry after 1 second.",
     ].map((message): [string, unknown] => [message, { status: 429, message }]),
+    [
+      "Workers AI 5035 plan ineligible",
+      {
+        status: 403,
+        errors: [
+          {
+            code: 5035,
+            message: "The model you are trying to access requires a Workers Paid plan.",
+          },
+        ],
+      },
+    ],
+    [
+      "Cloudflare quota code 3036",
+      {
+        status: 429,
+        errors: [{ code: 3036, message: "You have exceeded your daily quota." }],
+      },
+    ],
     ["invalid key", { status: 401, message: "invalid_api_key: Incorrect API key provided" }],
     ["forbidden", "403 Forbidden"],
     ["context overflow", "context_length_exceeded: maximum context length is 128000 tokens"],
@@ -229,11 +253,91 @@ describe("provider availability classification", () => {
       false,
     ],
     ["quota exhaustion", { status: 402, message: "provider quota exhausted" }, true],
+    [
+      "Workers AI 5035 plan ineligible",
+      {
+        status: 403,
+        errors: [
+          {
+            code: 5035,
+            message: "The model you are trying to access requires a Workers Paid plan.",
+          },
+        ],
+      },
+      true,
+    ],
+    [
+      "Cloudflare quota code 3036",
+      {
+        status: 429,
+        errors: [{ code: 3036, message: "You have exceeded your daily quota." }],
+      },
+      true,
+    ],
+    [
+      "Cloudflare quota code 4006",
+      {
+        status: 429,
+        errors: [
+          {
+            code: 4006,
+            message: "You have used up your daily free allocation of 10,000 neurons.",
+          },
+        ],
+      },
+      true,
+    ],
     ["plain status", new Error("503 provider unavailable"), true],
     ["HTTP server status", new Error("HTTP 500"), true],
     ["context overflow", new Error("context_length_exceeded; retry after 60s"), false],
     ["transient server failure", { status: 503, message: "service unavailable" }, true],
   ])("classifies %s", (_label, error, expected) => {
     expect(isRetryableProviderUnavailable(error)).toBe(expected);
+  });
+
+  describe("model plan eligibility and quota classifiers", () => {
+    it("identifies Cloudflare 5035 plan-ineligible errors", () => {
+      expect(
+        isModelPlanIneligible({
+          status: 403,
+          errors: [
+            {
+              code: 5035,
+              message: "The model you are trying to access requires a Workers Paid plan.",
+            },
+          ],
+        }),
+      ).toBe(true);
+      expect(
+        isModelPlanIneligible({
+          status: 403,
+          message: "permission denied",
+        }),
+      ).toBe(false);
+    });
+
+    it("identifies quota exhaustion across codes 3036, 4006, and 402", () => {
+      expect(
+        isModelQuotaExhausted({
+          status: 429,
+          errors: [{ code: 3036, message: "You have exceeded your daily quota." }],
+        }),
+      ).toBe(true);
+      expect(
+        isModelQuotaExhausted({
+          status: 429,
+          errors: [
+            {
+              code: 4006,
+              message: "You have used up your daily free allocation of 10,000 neurons.",
+            },
+          ],
+        }),
+      ).toBe(true);
+      expect(isModelQuotaExhausted({ status: 402, message: "quota exhausted" })).toBe(true);
+      expect(
+        isModelQuotaExhausted({ status: 429, message: "rate limit exceeded per minute" }),
+      ).toBe(false);
+    });
   });
 });
