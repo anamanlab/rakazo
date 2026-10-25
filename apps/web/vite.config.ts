@@ -26,6 +26,7 @@ import { defineConfig, loadEnv } from "vite";
 import { resolveScreenProxySecret } from "../../packages/core/src/secrets-guard.ts";
 import { createServiceLogger } from "../../packages/logging/src/env.ts";
 import { appendForwardedFor } from "./src/forwarded-for.js";
+import { internalRouteMiddleware } from "./src/internal-route.js";
 import { missingAssetMiddleware } from "./src/missing-asset.js";
 import {
   collectNovncHtml,
@@ -419,6 +420,8 @@ export default defineConfig(({ mode }) => {
       "/rpc",
       // The liveness probe. The document would otherwise answer it with the shell.
       "/health",
+      // The readiness probe. Forwards to the API database/degraded check.
+      "/ready",
       // Native app domain association, served by the API from deployment settings.
       "/.well-known/apple-app-site-association",
       "/.well-known/assetlinks.json",
@@ -511,6 +514,15 @@ export default defineConfig(({ mode }) => {
               `${config.base}${config.build.assetsDir}/`,
             ),
           );
+        },
+      },
+      {
+        name: "rakazo-internal-route-404",
+        configureServer({ middlewares }) {
+          middlewares.use(internalRouteMiddleware());
+        },
+        configurePreviewServer({ middlewares }) {
+          middlewares.use(internalRouteMiddleware());
         },
       },
       {

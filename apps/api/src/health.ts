@@ -25,11 +25,19 @@ export function healthRoutes(
     return inFlight;
   };
   app.get("/ready", async (c) => {
-    const degraded = details().degraded === true;
+    const currentDetails = details();
+    const degraded = currentDetails.degraded === true;
     const databaseUp = database ? await withinDeadline(probe(database)) : true;
     const ok = !degraded && databaseUp;
+    const revision =
+      typeof currentDetails.revision === "string" ? currentDetails.revision : undefined;
     return c.json(
-      { ok, degraded, ...(databaseUp ? {} : { database: "unreachable" }) },
+      {
+        ok,
+        degraded,
+        ...(revision ? { revision } : {}),
+        ...(databaseUp ? {} : { database: "unreachable" }),
+      },
       ok ? 200 : 503,
     );
   });

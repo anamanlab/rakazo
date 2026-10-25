@@ -45,6 +45,7 @@ jobs:
           RAKAZO_EDGE_HOST: ${{ vars.RAKAZO_EDGE_HOST }}
           RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
           RAKAZO_EDGE_ORIGIN: ${{ vars.RAKAZO_EDGE_ORIGIN }}
+          RAKAZO_GIT_SHA: ${{ github.sha }}
         run: pnpm --filter @rakazo/web-edge exec cf deploy --dry-run
       - name: Check the marketing site worker
         env:
@@ -86,6 +87,7 @@ jobs:
           RAKAZO_EDGE_HOST: ${{ vars.RAKAZO_EDGE_HOST }}
           RAKAZO_EDGE_ZONE: ${{ vars.RAKAZO_EDGE_ZONE }}
           RAKAZO_EDGE_ORIGIN: ${{ vars.RAKAZO_EDGE_ORIGIN }}
+          RAKAZO_GIT_SHA: ${{ github.sha }}
         run: pnpm --filter @rakazo/web-edge exec cf deploy --message "Rakazo app edge ${{ github.sha }}"
       - name: Deploy the marketing site worker
         env:
